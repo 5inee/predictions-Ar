@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PredictBattle - معارك التوقعات في الوقت الفعلي</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="main-header">
+            <div class="logo-container">
+                <div class="logo-icon"><i class="fas fa-bolt"></i></div>
+                <div class="logo-text">PredictBattle</div>
+            </div>
+        </header>
+
+        <section id="joinScreen" class="screen">
+            <div class="card">
+                <div class="card-header">
+                    <h1>انضم إلى معركة توقعات</h1>
+                    <p class="subtitle">ادخل رمز لعبة موجود أو أنشئ لعبتك الخاصة</p>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="gameId">رمز اللعبة</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-gamepad input-icon"></i>
+                            <input type="text" id="gameId" placeholder="أدخل رمز اللعبة المكون من 6 أحرف">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">اسمك</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-user input-icon"></i>
+                            <input type="text" id="username" placeholder="أدخل اسمك">
+                        </div>
+                    </div>
+                    <button id="joinGameBtn" class="btn btn-primary">
+                        <i class="fas fa-sign-in-alt"></i> انضم إلى اللعبة
+                    </button>
+                    <div class="separator">
+                        <span>أو</span>
+                    </div>
+                    <button id="createGameBtn" class="btn btn-secondary">
+                        <i class="fas fa-plus-circle"></i> إنشاء لعبة جديدة
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section id="createGameScreen" class="screen">
+            <div class="card">
+                <div class="card-header">
+                    <h1>إنشاء معركة جديدة</h1>
+                    <p class="subtitle">قم بإعداد تحدي التوقعات الخاص بك</p>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="gameQuestion">سؤال التحدي</label>
+                        <div class="input-wrapper textarea-wrapper">
+                            <i class="fas fa-question-circle input-icon"></i>
+                            <textarea id="gameQuestion" placeholder="ما الذي تريد أن يتوقعه اللاعبون؟"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="secretCode">الرمز السري</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-lock input-icon"></i>
+                            <input type="password" id="secretCode" placeholder="أدخل الرمز السري">
+                        </div>
+                        <div id="secretCodeError" class="error-message">
+                            <i class="fas fa-exclamation-circle"></i> رمز سري غير صالح
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="createNewGameBtn" class="btn btn-primary">
+                            <i class="fas fa-rocket"></i> ابدأ المعركة
+                        </button>
+                        <button id="backToJoinBtn" class="btn btn-text">
+                            <i class="fas fa-arrow-left"></i> عودة
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="gameScreen" class="screen">
+            <div class="card game-card">
+                <div class="card-header">
+                    <h1 class="game-title"></h1>
+                    <div class="game-meta">
+                        <div id="gameCode" class="game-code">
+                            <i class="fas fa-hashtag"></i> رمز اللعبة:
+                            <span id="gameCodeDisplay"></span>
+                            <button class="copy-button" aria-label="نسخ الرمز">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="player-stat">
+                            <i class="fas fa-users"></i> <span class="player-count">اللاعبون: 0/0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div id="waitingMessage" class="status-banner waiting">
+                        <i class="fas fa-hourglass-half pulse"></i>
+                        <span>في انتظار انضمام اللاعبين...</span>
+                    </div>
+
+                    <div id="predictionForm" class="prediction-panel">
+                        <div class="panel-header">
+                            <h2>توقعك</h2>
+                            <div class="prediction-actions">
+                                <button id="pastePredictionBtn" class="action-btn">
+                                    <i class="fas fa-paste"></i> لصق
+                                </button>
+                                <button id="clearPredictionBtn" class="action-btn">
+                                    <i class="fas fa-trash-alt"></i> مسح
+                                </button>
+                            </div>
+                        </div>
+                        <div class="prediction-input-container">
+                            <textarea id="prediction" placeholder="أدخل توقعك هنا..." readonly></textarea>
+                        </div>
+                        <button id="submitPredictionBtn" class="btn btn-primary btn-large">
+                            <i class="fas fa-paper-plane"></i> إرسال التوقع
+                        </button>
+                    </div>
+
+                    <div id="statusMessage" class="status-banner success">
+                        <i class="fas fa-check-circle"></i>
+                        <span>تم إرسال توقعك. سيتم الكشف عن التوقعات عندما يرسل جميع اللاعبين توقعاتهم.</span>
+                    </div>
+
+                    <div id="predictionCount" class="prediction-counter">
+                        <div class="counter-icon">
+                            <i class="fas fa-lightbulb"></i>
+                        </div>
+                        <div class="counter-text">التوقعات: 0/0</div>
+                    </div>
+
+                    <div id="predictionsList" class="predictions-list">
+                        <h2 class="section-title">جميع التوقعات</h2>
+                        <div id="predictionsContainer" class="predictions-container"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
