@@ -228,7 +228,7 @@ textarea:focus {
 }
 
 .btn-secondary:hover {
-  background: #b7b7b7;
+  background: #cacaca;
   transform: translateY(-2px);
 }
 
