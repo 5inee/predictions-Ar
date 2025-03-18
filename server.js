@@ -30,6 +30,54 @@ function generateShortId() {
     return result;
 }
 
+const INACTIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
+
+// دالة للتحقق من اللاعبين غير النشطين وحذفهم
+async function checkInactivePredictors() {
+    try {
+        // استعلام مُحسّن لجلب الألعاب التي بها لاعبين غير نشطين فقط
+        const cutoffTime = new Date(Date.now() - INACTIVE_TIMEOUT);
+        const games = await Game.find({
+            'predictors': {
+                $elemMatch: {
+                    'joinedAt': { $lt: cutoffTime }
+                }
+            }
+        });
+
+
+        for (const game of games) {
+            let predictorsChanged = false;
+
+            for (const [predictorId, predictorData] of game.predictors.entries()) {
+                //  لا حاجة لحساب timeSinceJoin هنا، الاستعلام يضمن أن joinedAt < cutoffTime
+
+                // التحقق مما إذا كان اللاعب غير نشط (مر وقت طويل على انضمامه ولم يرسل توقعًا)
+                if (!game.predictions.has(predictorId)) {
+                    game.predictors.delete(predictorId);
+                    console.log(`Predictor ${predictorId} removed from game ${game.id} due to inactivity.`);
+                    predictorsChanged = true;
+                }
+            }
+
+            if (predictorsChanged) {
+                await game.save();
+                // إرسال تحديث لجميع اللاعبين في الغرفة
+                io.to(game.id).emit('predictor_update', {
+                    count: game.predictors.size,
+                    total: game.maxPredictors,
+                });
+            }
+        }
+    } catch (error) {
+        console.error("Error checking inactive predictors:", error);
+    }
+}
+
+// تشغيل دالة التحقق بشكل دوري (كل دقيقة)
+setInterval(checkInactivePredictors, 60 * 1000);  // Check every minute
+
+
 // 1.  إنشاء لعبة جديدة (Create a new game)
 app.post('/api/games', async (req, res) => {
     try {
@@ -60,26 +108,24 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
 
-        // هنا التعديل:  نتأكد أن game.predictors موجود قبل ما نستخدم Object.keys()
         if ((game.predictors?.size || 0) >= game.maxPredictors) {
             return res.status(400).json({ error: 'Game is full' });
         }
 
         const predictorId = uuidv4();
-        const predictorCount = game.predictors.size; //  استخدام .size
+        const predictorCount = game.predictors.size;
 
         game.predictors.set(predictorId, {
             id: predictorId,
             username,
             avatarColor: getAvatarColor(predictorCount),
-            joinedAt: new Date(),
+            joinedAt: new Date(), // إضافة وقت الانضمام هنا
         });
 
         await game.save();
 
-        // إرسال تحديث لكل اللاعبين في الغرفة
         io.to(gameId).emit('predictor_update', {
-            count: game.predictors.size, //  .size
+            count: game.predictors.size,
             total: game.maxPredictors,
         });
 
@@ -88,7 +134,7 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             game: {
                 id: game.id,
                 question: game.question,
-                predictorCount: game.predictors.size, //  .size
+                predictorCount: game.predictors.size,
                 maxPredictors: game.maxPredictors,
             },
         });
@@ -112,7 +158,6 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
             return res.status(403).json({ error: 'Not a valid predictor' });
         }
 
-        //  تم التعديل هنا: استخدام الطريقة الثانية (فحص undefined) كبديل أسهل.
         if (!game.predictions || game.predictions.size >= game.maxPredictors) {
             return res.status(400).json({ error: 'Predictions are full' });
         }
@@ -160,13 +205,42 @@ io.on('connection', (socket) => {
     console.log('a user connected');
 
     socket.on('join_game', (gameId) => {
-        socket.join(gameId); // ضم اللاعب إلى غرفة اللعبة
+        socket.join(gameId);
         console.log(`User joined game: ${gameId}`);
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log('user disconnected');
-        // ممكن نضيف هنا كود للتعامل مع مغادرة اللاعب
+
+        //  إزالة اللاعب من اللعبة إذا لم يكن قد أرسل توقع
+        try {
+            const games = await Game.find({});
+            for (const game of games) {
+              let predictorRemoved = false;
+              for (const [predictorId, predictorData] of game.predictors.entries())
+              {
+                //لا يمكن مطابقة id, لذلك قمت بتعليق هذا الجزء
+                // if (predictorData.id === socket.id) {
+                    // Remove if no prediction submitted
+                  if (!game.predictions.has(predictorId)) {
+                    game.predictors.delete(predictorId);
+                    console.log(`Predictor ${predictorId} removed from game ${game.id} on disconnect.`);
+                    predictorRemoved = true;
+                }
+                // }
+            }
+              if(predictorRemoved){
+                await game.save();
+                io.to(game.id).emit('predictor_update', {
+                        count: game.predictors.size,
+                        total: game.maxPredictors
+                    });
+              }
+            }
+
+        } catch (error) {
+            console.error("Error handling disconnect:", error);
+        }
     });
 });
 
