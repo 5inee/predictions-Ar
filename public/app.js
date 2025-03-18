@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
             playerCountDisplay.textContent = `اللاعبون: ${data.game.predictorCount}/${data.game.maxPredictors}`;
 
             // Join the socket room after successful API call
-            socket.emit('join_game', { gameId: currentGameId, predictorId: currentPredictorId });
+            socket.emit('join_game', currentGameId);
 
             showToast(`مرحبًا بك في اللعبة، ${username}!`, true);
         } catch (error) {
@@ -309,30 +309,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
-    let reconnectInterval;
-
     // Socket.IO Event Handlers
     socket.on('connect', () => {
         console.log('Connected to server');
-        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-        clearInterval(reconnectInterval); // Clear any existing reconnect interval
-
-        // Re-join the game if we have a gameId and predictorId
-        if (currentGameId && currentPredictorId) {
-            socket.emit('join_game', { gameId: currentGameId, predictorId: currentPredictorId });
-        }
     });
-
-
-    socket.on('join_confirmed', (data) => { //  استقبال تأكيد الانضمام
-      if(data.predictorId){
-        console.log("Join confirmed, predictor ID:", data.predictorId);
-      }
-
-    });
-
 
     socket.on('connect_error', (error) => {
         console.error('Socket connection error:', error);
