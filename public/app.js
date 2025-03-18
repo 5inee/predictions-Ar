@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
             predictionCount.style.display = 'block';
 
             if (data.allPredictionsSubmitted) {
-                statusMessage.innerHTML = '<i class="fas fa-check-circle"></i><span>تم إرسال جميع التوقعات! سيتم الكشف عن النتائج قريبًا...</span>';
+                statusMessage.innerHTML = '<i class="fas fa-check-circle"></i><span> تم إرسال جميع التوقعات! سوف ترى جميع التوقعات أدناه.</span>';
             } else {
                 statusMessage.innerHTML = '<i class="fas fa-check-circle"></i><span> تم إرسال توقعك. في انتظار انتهاء الآخرين...</span>';
             }

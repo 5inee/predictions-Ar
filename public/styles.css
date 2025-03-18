@@ -450,11 +450,13 @@ textarea:focus {
 }
 
 .counter-icon {
+  display: inline-block;
   color: var(--primary);
   font-size: 24px;
 }
 
 .counter-text {
+  display: inline-block;
   font-weight: 600;
   color: var(--primary);
   font-size: 18px;
