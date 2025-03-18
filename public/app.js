@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 gameIdInput.classList.remove('highlight');
             }, 1500);
 
-            showToast(`تم إنشاء اللعبة! رمز اللعبة: ${data.gameId}`, true);
+            showToast(`تم إنشاء اللعبة! كود اللعبة: ${data.gameId}`, true);
             secretCodeInput.value = '';
             gameQuestionInput.value = '';
         } catch (error) {
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const username = usernameInput.value.trim();
 
         if (!gameId) {
-            showToast('الرجاء إدخال رمز اللعبة.');
+            showToast('الرجاء إدخال كود اللعبة.');
             gameIdInput.focus();
             return;
         }
@@ -230,11 +230,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         navigator.clipboard.writeText(currentGameId)
             .then(() => {
-                showToast('تم نسخ رمز اللعبة إلى الحافظة!', true);
+                showToast('تم نسخ كود اللعبة إلى الحافظة!', true);
             })
             .catch(err => {
                 console.error('Failed to copy game code:', err);
-                showToast('فشل في نسخ رمز اللعبة.');
+                showToast('فشل في نسخ كود اللعبة.');
             });
     });
 
