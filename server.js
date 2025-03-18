@@ -10,33 +10,18 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+// Serve static files
 app.use(express.static('public'));
-app.use(express.json()); // دعم JSON في الطلبات
+app.use(express.json()); // عشان نقدر نقرأ بيانات JSON من الطلبات
 
-// ✅ 1. التحقق من تحميل MONGO_URI من env
+// MongoDB connection
 const mongoUri = process.env.MONGO_URI;
-if (!mongoUri) {
-    console.error('❌ MONGO_URI is not defined! Check your .env file.');
-    process.exit(1);
-}
-
-// ✅ 2. تحسين الاتصال بقاعدة البيانات مع إعادة المحاولة
-const connectWithRetry = () => {
-    console.log('🔄 Attempting MongoDB connection...');
-    mongoose.connect(mongoUri, { 
-        useNewUrlParser: true, 
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000 // مهلة للاتصال
-    })
+console.log('MongoDB URI:', process.env.MONGO_URI);
+mongoose.connect(mongoUri)
     .then(() => console.log('✅ Connected to MongoDB'))
-    .catch(err => {
-        console.error('❌ MongoDB Connection Error:', err);
-        setTimeout(connectWithRetry, 5000); // إعادة المحاولة بعد 5 ثواني
-    });
-};
-connectWithRetry();
+    .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// ✅ 3. وظيفة لتوليد ID قصير
+// دالة لتوليد ID قصير (ممكن تستخدمها أو uuid)
 function generateShortId() {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -46,42 +31,43 @@ function generateShortId() {
     return result;
 }
 
-// ✅ 4. إنشاء لعبة جديدة
+// 1.  إنشاء لعبة جديدة (Create a new game)
 app.post('/api/games', async (req, res) => {
     try {
-        const gameId = generateShortId();
+        const gameId = generateShortId(); // أو استخدم uuidv4()
         const newGame = new Game({
             id: gameId,
             question: req.body.question,
-            maxPredictors: 5,
-            predictors: new Map(),
-            predictions: new Map(),
-            revealedToAll: false
+            maxPredictors: 5, // ممكن تخليه متغير
+            predictors: new Map(), // تهيئة predictors
+            predictions: new Map(), // تهيئة predictions هنا
         });
-
         await newGame.save();
-        res.json({ gameId });
+        res.json({ gameId }); // نرجع ID اللعبة
     } catch (error) {
-        console.error("❌ Error creating game:", error);
+        console.error("Error creating game:", error);
         res.status(500).json({ error: 'Failed to create game' });
     }
 });
 
-// ✅ 5. الانضمام إلى لعبة
+// 2. الانضمام إلى لعبة (Join a game)
 app.post('/api/games/:gameId/join', async (req, res) => {
     const { gameId } = req.params;
     const { username } = req.body;
 
     try {
         const game = await Game.findOne({ id: gameId });
-        if (!game) return res.status(404).json({ error: 'Game not found' });
+        if (!game) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
 
+        // هنا التعديل:  نتأكد أن game.predictors موجود قبل ما نستخدم Object.keys()
         if ((game.predictors?.size || 0) >= game.maxPredictors) {
             return res.status(400).json({ error: 'Game is full' });
         }
 
         const predictorId = uuidv4();
-        const predictorCount = game.predictors.size;
+        const predictorCount = game.predictors.size; //  استخدام .size
 
         game.predictors.set(predictorId, {
             id: predictorId,
@@ -91,38 +77,44 @@ app.post('/api/games/:gameId/join', async (req, res) => {
         });
 
         await game.save();
-        io.to(gameId).emit('predictor_update', { count: game.predictors.size, total: game.maxPredictors });
+
+        // إرسال تحديث لكل اللاعبين في الغرفة
+        io.to(gameId).emit('predictor_update', {
+            count: game.predictors.size, //  .size
+            total: game.maxPredictors,
+        });
 
         res.json({
             predictorId,
             game: {
                 id: game.id,
                 question: game.question,
-                predictorCount: game.predictors.size,
+                predictorCount: game.predictors.size, //  .size
                 maxPredictors: game.maxPredictors,
             },
         });
     } catch (error) {
-        console.error("❌ Error joining game:", error);
+        console.error("Error joining game:", error);
         res.status(500).json({ error: 'Failed to join game' });
     }
 });
 
-// ✅ 6. إرسال توقع
+// 3. إرسال توقع (Submit a prediction)
 app.post('/api/games/:gameId/predict', async (req, res) => {
     const { gameId } = req.params;
     const { predictorId, prediction } = req.body;
 
     try {
         const game = await Game.findOne({ id: gameId });
-        if (!game) return res.status(404).json({ error: 'Game not found' });
-
+        if (!game) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
         if (!game.predictors.has(predictorId)) {
             return res.status(403).json({ error: 'Not a valid predictor' });
         }
 
-        if (!game.predictions) game.predictions = new Map();
-        if (game.predictions.size >= game.maxPredictors) {
+        //  تم التعديل هنا: استخدام الطريقة الثانية (فحص undefined) كبديل أسهل.
+        if (!game.predictions || game.predictions.size >= game.maxPredictors) {
             return res.status(400).json({ error: 'Predictions are full' });
         }
 
@@ -132,16 +124,26 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
         const predictionsCount = game.predictions.size;
         const allPredictionsSubmitted = predictionsCount === game.maxPredictors;
 
+        // إرسال تحديث لجميع اللاعبين في الغرفة بعدد التوقعات
         io.to(gameId).emit('prediction_update', { count: predictionsCount, total: game.maxPredictors });
 
+        // إذا اكتمل عدد التوقعات، أرسل كل التوقعات
         if (allPredictionsSubmitted && !game.revealedToAll) {
             game.revealedToAll = true;
             await game.save();
 
             const predictionsArray = [];
+
+            // Iterate through each prediction
             for (const [pid, predictionData] of game.predictions.entries()) {
+                // Get the predictor information
                 const predictor = game.predictors.get(pid);
-                predictionsArray.push({ predictor, prediction: predictionData });
+
+                // Add to the array with the right structure
+                predictionsArray.push({
+                    predictor,
+                    prediction: predictionData
+                });
             }
 
             io.to(gameId).emit('all_predictions_revealed', { predictions: predictionsArray });
@@ -149,32 +151,32 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
 
         res.json({ success: true, predictionsCount, allPredictionsSubmitted });
     } catch (error) {
-        console.error("❌ Error submitting prediction:", error);
+        console.error("Error submitting prediction:", error);
         res.status(500).json({ error: 'Failed to submit prediction' });
     }
 });
 
-// ✅ 7. إعداد WebSockets
+// Socket.IO
 io.on('connection', (socket) => {
-    console.log('🔗 A user connected');
+    console.log('a user connected');
 
     socket.on('join_game', (gameId) => {
-        socket.join(gameId);
-        console.log(`👥 User joined game: ${gameId}`);
+        socket.join(gameId); // ضم اللاعب إلى غرفة اللعبة
+        console.log(`User joined game: ${gameId}`);
     });
 
     socket.on('disconnect', () => {
-        console.log('❌ User disconnected');
+        console.log('user disconnected');
+        // ممكن نضيف هنا كود للتعامل مع مغادرة اللاعب
     });
 });
 
-// ✅ 8. تشغيل السيرفر
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
 
-// ✅ 9. دالة اختيار لون للصورة الرمزية
+// دالة بسيطة لاختيار لون للصورة الرمزية
 function getAvatarColor(index) {
     const colors = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8'];
     return colors[index % colors.length];
