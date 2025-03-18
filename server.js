@@ -15,7 +15,8 @@ app.use(express.static('public'));
 app.use(express.json()); // عشان نقدر نقرأ بيانات JSON من الطلبات
 
 // MongoDB connection
-const mongoUri = process.env.MONGO_URI;
+// In server.js
+const mongoUri = process.env.MONGO_URI.split(' ')[0]; // Extract just the MongoDB URI part
 mongoose.connect(mongoUri)
     .then(() => console.log('✅ Connected to MongoDB'))
     .catch(err => console.error('❌ MongoDB Connection Error:', err));
