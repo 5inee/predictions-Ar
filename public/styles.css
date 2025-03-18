@@ -224,14 +224,11 @@ textarea:focus {
 }
 
 .btn-secondary {
-  background: linear-gradient(135deg, var(--secondary), var(--secondary-dark));
-  color: var(--dark);
-  box-shadow: 0 4px 10px rgba(100, 223, 223, 0.3);
+  background: #f0f0f0;
 }
 
 .btn-secondary:hover {
-  background: linear-gradient(135deg, var(--secondary-light), var(--secondary));
-  box-shadow: 0 6px 14px rgba(100, 223, 223, 0.4);
+  background: #b7b7b7;
   transform: translateY(-2px);
 }
 
