@@ -215,8 +215,49 @@ document.addEventListener('DOMContentLoaded', () => {
             // Set initial player count
             playerCountDisplay.textContent = `اللاعبون: ${data.game.predictorCount}/${data.game.maxPredictors}`;
 
-            // Join the socket room after successful API call
+            // Join the socket room
             socket.emit('join_game', currentGameId);
+            // Handle spectator/predictor
+           if (data.isSpectator || data.game.allPredictionsRevealed) {
+                // Hide prediction form, show predictions directly
+
+                waitingMessage.style.display = 'none';
+                predictionForm.style.display = 'none';
+                statusMessage.style.display = 'none';
+                predictionCount.style.display = 'none';
+                predictionsContainer.innerHTML = '';
+
+                 data.game.predictions.forEach((item) => {
+                    const { predictor, prediction } = item;
+                    const isCurrentUser = predictor.id === currentPredictorId;
+                    const avatarColor = predictor.avatarColor || generateRandomColor();
+
+                    const predictionCard = document.createElement('div');
+                    predictionCard.className = `prediction-card ${isCurrentUser ? 'fade-in' : ''}`;
+
+                    const formattedPrediction = prediction.content.replace(/\n/g, '<br>');
+
+                        predictionCard.innerHTML = `
+                        <div class="prediction-header">
+                            <div class="predictor-info">
+                                <div class="predictor-avatar" style="background-color: ${avatarColor}">
+                                    ${predictor.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div class="predictor-name">
+                                    ${predictor.username} ${isCurrentUser ? '(أنت)' : ''}
+                                </div>
+                            </div>
+                            <div class="timestamp">${formatTime(prediction.submittedAt)}</div>
+                        </div>
+                        <div class="prediction-content">${formattedPrediction}</div>
+                    `;
+
+                    predictionsContainer.appendChild(predictionCard);
+                });
+                predictionsList.style.display = 'block';
+                predictionsList.scrollIntoView({ behavior: 'smooth' });
+           }
+
 
             showToast(`مرحبًا بك في اللعبة، ${username}!`, true);
         } catch (error) {
