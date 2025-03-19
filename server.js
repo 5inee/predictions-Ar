@@ -179,16 +179,60 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
 
 // Socket.IO
 io.on('connection', (socket) => {
-    console.log('a user connected');
+    console.log('a user connected with socket ID:', socket.id);
+    let joinedGameId = null;
+    let currentPredictorId = null;
 
-    socket.on('join_game', (gameId) => {
+    socket.on('join_game', async (gameId) => {
         socket.join(gameId); // ضم اللاعب إلى غرفة اللعبة
+        joinedGameId = gameId;
         console.log(`User joined game: ${gameId}`);
+
+        // Find the game and add socket id
+        try {
+            const game = await Game.findOne({ id: gameId });
+            if (game) {
+                // Find Predictor Id
+                for (let [key, value] of game.predictors.entries()) {
+                    if(value.username){
+                         currentPredictorId = key;
+                         break;
+                    }
+
+                }
+            }
+
+        } catch (error) {
+            console.error("Error finding game on join_game:", error);
+        }
+
     });
 
-    socket.on('disconnect', () => {
-        console.log('user disconnected');
-        // ممكن نضيف هنا كود للتعامل مع مغادرة اللاعب
+    socket.on('disconnect', async () => {
+        console.log(`user disconnected with socket ID: ${socket.id}`);
+
+        if (joinedGameId && currentPredictorId) {
+            try {
+                const game = await Game.findOne({ id: joinedGameId });
+
+                if (game && game.predictors.has(currentPredictorId)) {
+                    // Check if prediction has been submitted
+                    if (!game.predictions.has(currentPredictorId)) {
+                        // Player disconnected BEFORE submitting, remove
+                        game.predictors.delete(currentPredictorId);
+                        await game.save();
+
+                         // إرسال تحديث لكل اللاعبين في الغرفة
+                        io.to(joinedGameId).emit('predictor_update', {
+                            count: game.predictors.size,
+                            total: game.maxPredictors,
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error("Error handling disconnect:", error);
+            }
+        }
     });
 });
 
