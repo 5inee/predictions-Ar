@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPredictorId = null;
     let hasSubmitted = false;
     let currentUsername = '';
+    let isGameFull = false; // متغير لتتبع حالة امتلاء اللعبة
 
     // Secret code constant
     const CORRECT_SECRET_CODE = '021';
@@ -73,9 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show the requested screen
         document.getElementById(screenId).style.display = 'block';
-
-        // Additional setup for specific screens
-
     }
 
     function generateRandomColor() {
@@ -97,15 +95,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function resetGameState() {
-        predictionForm.style.display = 'block';
-        waitingMessage.style.display = 'block';
+      //لا تسوي ريست اذا اللعبه فل
+        if (!isGameFull) {
+            predictionForm.style.display = 'block';
+            waitingMessage.style.display = 'block';
+            predictionInput.value = '';
+            predictionInput.removeAttribute('readonly');
+            hasSubmitted = false;
+        }
+
         statusMessage.style.display = 'none';
         predictionCount.style.display = 'none';
         predictionsList.style.display = 'none';
-        predictionInput.value = '';
-        predictionInput.removeAttribute('readonly');
-        hasSubmitted = false;
         predictionsContainer.innerHTML = '';
+
     }
 
     // Event Listeners
@@ -204,16 +207,39 @@ document.addEventListener('DOMContentLoaded', () => {
             currentGameId = data.game.id;
             currentPredictorId = data.predictorId;
             currentUsername = username;
+            isGameFull = data.game.isGameFull; // استقبل حالة الامتلاء من السيرفر
 
             showScreen('gameScreen');
             resetGameState();
+
 
             // Update UI with game info
             gameQuestionDisplay.textContent = data.game.question;
             gameCodeDisplay.textContent = data.game.id;
 
             // Set initial player count
-            playerCountDisplay.textContent = `اللاعبون: ${data.game.predictorCount}/${data.game.maxPredictors}`;
+            playerCountDisplay.textContent = `اللاعبون: <span class="math-inline">\{data\.game\.predictorCount\}/</span>{data.game.maxPredictors}`;
+
+             // إذا كانت اللعبة ممتلئة، اخفِ حقل التوقع
+             if (isGameFull) {
+                predictionForm.style.display = 'none';
+                waitingMessage.style.display = 'none'; // اخفِ رسالة "في انتظار اللاعبين"
+                statusMessage.style.display = 'block';
+                statusMessage.innerHTML = '<i class="fas fa-info-circle"></i><span>انتهى وقت اللعبة.</span>';
+                 // Trigger the display of predictions immediately.
+                socket.emit('join_game', currentGameId); // Ensure we are in the room.
+
+                // Send a custom event to request predictions, since we bypass the normal submission flow.
+                // Note: This might not be strictly necessary if your server already sends all_predictions_revealed
+                // when a late joiner connects *and* predictions are already available.  But it's safer to explicitly ask.
+
+                socket.emit('request_predictions', currentGameId);
+
+            } else {
+                predictionForm.style.display = 'block';
+                waitingMessage.style.display = 'block';
+            }
+
 
             // Join the socket room after successful API call
             socket.emit('join_game', currentGameId);
@@ -271,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+
         try {
             const response = await fetch(`/api/games/${currentGameId}/predict`, {
                 method: 'POST',
@@ -321,12 +348,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('predictor_update', (data) => {
         console.log('Received predictor_update:', data);
-        playerCountDisplay.textContent = `اللاعبون: ${data.count}/${data.total}`;
+        playerCountDisplay.textContent = `اللاعبون: <span class="math-inline">\{data\.count\}/</span>{data.total}`;
 
+        // تحديث حالة اللعبة وعرض/إخفاء العناصر بناءً عليها
         if (data.count === data.total) {
             waitingMessage.style.display = 'none';
+
+             // اذا اللاعب داخل مسبقا، اخفي مساحه الكتابه
+            if(hasSubmitted){
+                predictionForm.style.display = 'none';
+            }
+
         } else {
-            waitingMessage.style.display = 'block';
+          // اذا اللاعب داخل مسبقا، اخفي مساحه الكتابه
+            if(hasSubmitted){
+                predictionForm.style.display = 'none';
+            }
+          //اذا اللعبه ما اكتملت، وكان اللاعب السادس او السابع...الخ، اخفي مساحه الكتابه
+           else if (data.count > 5) {
+                predictionForm.style.display = 'none';
+                 waitingMessage.style.display = 'none';
+            }
+
+            else {
+                waitingMessage.style.display = 'block';
+            }
         }
     });
 
@@ -334,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Received prediction_update:', data);
         if (predictionCount) {
             predictionCount.style.display = 'block';
-            document.querySelector('.counter-text').textContent = `التوقعات: ${data.count}/${data.total}`;
+            document.querySelector('.counter-text').textContent = `التوقعات: <span class="math-inline">\{data\.count\}/</span>{data.total}`;
 
             if (data.count === data.total && hasSubmitted) {
                 // All predictions are in
@@ -344,6 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('all_predictions_revealed', (data) => {
+      //إظهار التوقعات حتى لو كان اللاعب متأخرًا
         console.log('Received all_predictions_revealed:', data);
 
         // Update UI for results view
@@ -364,7 +411,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const formattedPrediction = prediction.content.replace(/\n/g, '<br>');
 
-             predictionCard.innerHTML = `
+            predictionCard.innerHTML = `
+                <div class="prediction-header">
+                    <div class="predictor-info">
+                        <div class="predictor-avatar" style="background-color: ${avatarColor}">
+                            ${predictor.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="predictor-name">
+                            ${predictor.username} <span class="math-inline">\{isCurrentUser ? '\(أنت\)' \: ''\}
+</div\>
+</div\>
+<div class\="timestamp"\></span>{formatTime(prediction.submittedAt)}</div>
+                </div>
+                <div class="prediction-content">${formattedPrediction}</div>
+            `;
+
+            predictionsContainer.appendChild(predictionCard);
+        });
+
+        predictionsList.style.display = 'block';
+
+        // Scroll to predictions section
+        predictionsList.scrollIntoView({ behavior: 'smooth' });
+    });
+
+      // استقبال التوقعات اذا اللاعب انضم بعد ارسالها
+      socket.on('predictions_data', (data) => {
+
+          if(data && data.predictions){
+               // Update UI for results view
+        waitingMessage.style.display = 'none';
+        statusMessage.style.display = 'none';
+        predictionCount.style.display = 'none';
+        predictionForm.style.display = 'none';
+        predictionsContainer.innerHTML = '';
+
+        // Generate prediction cards
+        data.predictions.forEach((item) => {
+            const { predictor, prediction } = item;
+            const isCurrentUser = predictor.id === currentPredictorId;
+            const avatarColor = predictor.avatarColor || generateRandomColor();
+
+            const predictionCard = document.createElement('div');
+            predictionCard.className = `prediction-card ${isCurrentUser ? 'fade-in' : ''}`;
+
+            const formattedPrediction = prediction.content.replace(/\n/g, '<br>');
+
+            predictionCard.innerHTML = `
                 <div class="prediction-header">
                     <div class="predictor-info">
                         <div class="predictor-avatar" style="background-color: ${avatarColor}">
@@ -386,8 +479,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Scroll to predictions section
         predictionsList.scrollIntoView({ behavior: 'smooth' });
+          }
 
     });
+
 
     socket.on('game_error', (error) => {
         showToast(error.message || 'حدث خطأ في اللعبة');

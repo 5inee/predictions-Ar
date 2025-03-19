@@ -50,7 +50,7 @@ async function checkInactivePredictors() {
             let predictorsChanged = false;
 
             for (const [predictorId, predictorData] of game.predictors.entries()) {
-                //  لا حاجة لحساب timeSinceJoin هنا، الاستعلام يضمن أن joinedAt < cutoffTime
+                //  لا حاجة لحساب timeSinceJoin هنا، الاستعلام يضمن أن joinedAt < cutoffTime
 
                 // التحقق مما إذا كان اللاعب غير نشط (مر وقت طويل على انضمامه ولم يرسل توقعًا)
                 if (!game.predictions.has(predictorId)) {
@@ -108,12 +108,9 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
 
-        if ((game.predictors?.size || 0) >= game.maxPredictors) {
-            return res.status(400).json({ error: 'Game is full' });
-        }
-
         const predictorId = uuidv4();
         const predictorCount = game.predictors.size;
+        const isGameFull = predictorCount >= game.maxPredictors; // نعّرف إذا اللعبة ممتلئة
 
         game.predictors.set(predictorId, {
             id: predictorId,
@@ -136,6 +133,7 @@ app.post('/api/games/:gameId/join', async (req, res) => {
                 question: game.question,
                 predictorCount: game.predictors.size,
                 maxPredictors: game.maxPredictors,
+                isGameFull  // نرسل حالة الامتلاء
             },
         });
     } catch (error) {
@@ -158,6 +156,7 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
             return res.status(403).json({ error: 'Not a valid predictor' });
         }
 
+        // منع استقبال توقعات جديدة إذا كانت اللعبة ممتلئة بالفعل
         if (!game.predictions || game.predictions.size >= game.maxPredictors) {
             return res.status(400).json({ error: 'Predictions are full' });
         }
@@ -217,25 +216,25 @@ io.on('connection', (socket) => {
             const games = await Game.find({});
             for (const game of games) {
               let predictorRemoved = false;
-              for (const [predictorId, predictorData] of game.predictors.entries())
-              {
-                //لا يمكن مطابقة id, لذلك قمت بتعليق هذا الجزء
-                // if (predictorData.id === socket.id) {
-                    // Remove if no prediction submitted
-                  if (!game.predictions.has(predictorId)) {
-                    game.predictors.delete(predictorId);
-                    console.log(`Predictor ${predictorId} removed from game ${game.id} on disconnect.`);
-                    predictorRemoved = true;
+                for (const [predictorId, predictorData] of game.predictors.entries())
+                {
+                  //لا يمكن مطابقة id, لذلك قمت بتعليق هذا الجزء
+                    // if (predictorData.id === socket.id) {
+                        // Remove if no prediction submitted
+                      if (!game.predictions.has(predictorId)) {
+                        game.predictors.delete(predictorId);
+                        console.log(`Predictor ${predictorId} removed from game ${game.id} on disconnect.`);
+                        predictorRemoved = true;
+                      }
+                    // }
                 }
-                // }
-            }
-              if(predictorRemoved){
-                await game.save();
-                io.to(game.id).emit('predictor_update', {
-                        count: game.predictors.size,
-                        total: game.maxPredictors
-                    });
-              }
+                if(predictorRemoved){
+                  await game.save();
+                  io.to(game.id).emit('predictor_update', {
+                            count: game.predictors.size,
+                            total: game.maxPredictors
+                        });
+                }
             }
 
         } catch (error) {
