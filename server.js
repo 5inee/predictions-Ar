@@ -45,10 +45,13 @@ async function checkInactivePredictors() {
             }
         });
 
+
         for (const game of games) {
             let predictorsChanged = false;
 
             for (const [predictorId, predictorData] of game.predictors.entries()) {
+                //  لا حاجة لحساب timeSinceJoin هنا، الاستعلام يضمن أن joinedAt < cutoffTime
+
                 // التحقق مما إذا كان اللاعب غير نشط (مر وقت طويل على انضمامه ولم يرسل توقعًا)
                 if (!game.predictions.has(predictorId)) {
                     game.predictors.delete(predictorId);
@@ -59,18 +62,9 @@ async function checkInactivePredictors() {
 
             if (predictorsChanged) {
                 await game.save();
-                
-                // حساب عدد اللاعبين النشطين بعد الحذف
-                let activePredictorCount = 0;
-                for (const [, predictor] of game.predictors.entries()) {
-                    if (!predictor.viewOnly) {
-                        activePredictorCount++;
-                    }
-                }
-                
                 // إرسال تحديث لجميع اللاعبين في الغرفة
                 io.to(game.id).emit('predictor_update', {
-                    count: Math.min(activePredictorCount, game.maxPredictors),
+                    count: game.predictors.size,
                     total: game.maxPredictors,
                 });
             }
@@ -139,17 +133,8 @@ app.post('/api/games/:gameId/join', async (req, res) => {
 
         await game.save();
 
-        // حساب عدد اللاعبين النشطين فقط (استبعاد من هم في وضع المشاهدة)
-        let activePredictorCount = 0;
-        for (const [, predictor] of game.predictors.entries()) {
-            if (!predictor.viewOnly) {
-                activePredictorCount++;
-            }
-        }
-
-        // إرسال عدد اللاعبين النشطين فقط
         io.to(gameId).emit('predictor_update', {
-            count: Math.min(activePredictorCount, game.maxPredictors),
+            count: game.predictors.size,
             total: game.maxPredictors,
         });
 
@@ -158,10 +143,10 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             game: {
                 id: game.id,
                 question: game.question,
-                predictorCount: activePredictorCount, // تحديث هنا أيضًا
+                predictorCount: game.predictors.size,
                 maxPredictors: game.maxPredictors,
-                isViewOnly: isViewOnly,
-                allPredictionsSubmitted: allPredictionsSubmitted
+                isViewOnly: isViewOnly, // إرسال حالة المشاهدة فقط للعميل
+                allPredictionsSubmitted: allPredictionsSubmitted // إرسال حالة اكتمال التوقعات
             },
         });
     } catch (error) {
@@ -276,34 +261,26 @@ io.on('connection', (socket) => {
         try {
             const games = await Game.find({});
             for (const game of games) {
-                let predictorRemoved = false;
-                for (const [predictorId, predictorData] of game.predictors.entries()) {
-                    //لا يمكن مطابقة id, لذلك قمت بتعليق هذا الجزء
-                    // if (predictorData.id === socket.id) {
-                        // Remove if no prediction submitted
-                    if (!game.predictions.has(predictorId)) {
-                        game.predictors.delete(predictorId);
-                        console.log(`Predictor ${predictorId} removed from game ${game.id} on disconnect.`);
-                        predictorRemoved = true;
-                    }
-                    // }
+              let predictorRemoved = false;
+              for (const [predictorId, predictorData] of game.predictors.entries())
+              {
+                //لا يمكن مطابقة id, لذلك قمت بتعليق هذا الجزء
+                // if (predictorData.id === socket.id) {
+                    // Remove if no prediction submitted
+                  if (!game.predictions.has(predictorId)) {
+                    game.predictors.delete(predictorId);
+                    console.log(`Predictor ${predictorId} removed from game ${game.id} on disconnect.`);
+                    predictorRemoved = true;
                 }
-                if(predictorRemoved){
-                    await game.save();
-                    
-                    // حساب عدد اللاعبين النشطين بعد الحذف
-                    let activePredictorCount = 0;
-                    for (const [, predictor] of game.predictors.entries()) {
-                        if (!predictor.viewOnly) {
-                            activePredictorCount++;
-                        }
-                    }
-                    
-                    io.to(game.id).emit('predictor_update', {
-                        count: Math.min(activePredictorCount, game.maxPredictors),
+                // }
+            }
+              if(predictorRemoved){
+                await game.save();
+                io.to(game.id).emit('predictor_update', {
+                        count: game.predictors.size,
                         total: game.maxPredictors
                     });
-                }
+              }
             }
 
         } catch (error) {
