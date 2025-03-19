@@ -108,75 +108,48 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
 
-        const isSpectator = (game.predictors?.size || 0) >= game.maxPredictors;
+        const isSpectator = game.predictors.size >= game.maxPredictors;
 
-if (!isSpectator) {
-    const predictorId = uuidv4();
-    const predictorCount = game.predictors.size;
+        if (!isSpectator) {
+            const predictorId = uuidv4();
+            const predictorCount = game.predictors.size;
 
-    game.predictors.set(predictorId, {
-        id: predictorId,
-        username,
-        avatarColor: getAvatarColor(predictorCount),
-        joinedAt: new Date(),
-    });
+            game.predictors.set(predictorId, {
+                id: predictorId,
+                username,
+                avatarColor: getAvatarColor(predictorCount),
+                joinedAt: new Date(),
+            });
 
-    await game.save();
+            await game.save();
 
-    io.to(gameId).emit('predictor_update', {
-        count: game.predictors.size,
-        total: game.maxPredictors,
-    });
+            io.to(gameId).emit('predictor_update', {
+                count: game.predictors.size,
+                total: game.maxPredictors,
+            });
 
-    return res.json({
-        predictorId,
-        game: {
-            id: game.id,
-            question: game.question,
-            predictorCount: game.predictors.size,
-            maxPredictors: game.maxPredictors,
-        },
-    });
-}
+            return res.json({
+                predictorId,
+                spectator: false, // هذا لاعب وليس متفرجًا
+                game: {
+                    id: game.id,
+                    question: game.question,
+                    predictorCount: game.predictors.size,
+                    maxPredictors: game.maxPredictors,
+                },
+            });
+        }
 
-// اللاعب السادس وما بعده سيكون متفرجًا فقط
-return res.json({
-    spectator: true,
-    game: {
-        id: game.id,
-        question: game.question,
-        predictions: Array.from(game.predictions.values()), // إرسال التوقعات مباشرة
-        predictorCount: game.predictors.size,
-        maxPredictors: game.maxPredictors,
-    }
-});
-
-
-        const predictorId = uuidv4();
-        const predictorCount = game.predictors.size;
-
-        game.predictors.set(predictorId, {
-            id: predictorId,
-            username,
-            avatarColor: getAvatarColor(predictorCount),
-            joinedAt: new Date(), // إضافة وقت الانضمام هنا
-        });
-
-        await game.save();
-
-        io.to(gameId).emit('predictor_update', {
-            count: game.predictors.size,
-            total: game.maxPredictors,
-        });
-
-        res.json({
-            predictorId,
+        // إذا كان العدد ممتلئًا، اجعل اللاعب متفرجًا فقط
+        return res.json({
+            spectator: true,
             game: {
                 id: game.id,
                 question: game.question,
+                predictions: Array.from(game.predictions.values()), // إرسال كل التوقعات للعرض
                 predictorCount: game.predictors.size,
                 maxPredictors: game.maxPredictors,
-            },
+            }
         });
     } catch (error) {
         console.error("Error joining game:", error);
@@ -195,8 +168,8 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
         if (!game.predictors.has(predictorId)) {
-            return res.status(403).json({ error: 'Not a valid predictor' });
-        }
+            return res.status(403).json({ error: 'You are a spectator and cannot submit predictions.' });
+        }        
 
         if (!game.predictions || game.predictions.size >= game.maxPredictors) {
             return res.status(400).json({ error: 'Predictions are full' });
