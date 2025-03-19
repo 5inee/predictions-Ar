@@ -1,5 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const socket = io();
+    const socket = io({
+        query: {
+            // سيتم ملء هذا لاحقا
+        }
+      });
 
     // DOM Elements
     const joinScreen = document.getElementById('joinScreen');
@@ -202,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             currentGameId = data.game.id;
-            currentPredictorId = data.predictorId;
+            currentPredictorId = data.predictorId; // تخزين ال predictorId
             currentUsername = username;
 
             showScreen('gameScreen');
@@ -215,9 +219,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Set initial player count
             playerCountDisplay.textContent = `اللاعبون: ${data.game.predictorCount}/${data.game.maxPredictors}`;
 
-            // Join the socket room
+            // Join the socket room --  التعديل هنا!
+            socket.io.opts.query = { predictorId: currentPredictorId }; // اضف ال predictorId
             socket.emit('join_game', currentGameId);
-            // Handle spectator/predictor
+
+           // Handle spectator/predictor
            if (data.isSpectator || data.game.allPredictionsRevealed) {
                 // Hide prediction form, show predictions directly
 

@@ -192,13 +192,12 @@ io.on('connection', (socket) => {
         try {
             const game = await Game.findOne({ id: gameId });
             if (game) {
-                // Find Predictor Id
+                // Find Predictor Id  -  التعديل هنا!
                 for (let [key, value] of game.predictors.entries()) {
-                    if(value.username){
-                         currentPredictorId = key;
-                         break;
+                    if (value.id === socket.handshake.query.predictorId) { // قارن بمعرف اللاعب
+                        currentPredictorId = key;
+                        break; // اخرج من الحلقة بعد العثور على اللاعب
                     }
-
                 }
             }
 
