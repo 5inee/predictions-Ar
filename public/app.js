@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Join the socket room --  التعديل هنا!
             socket.io.opts.query = { predictorId: currentPredictorId }; // اضف ال predictorId
-            socket.emit('join_game', currentGameId);
+            socket.emit('join_game', currentGameId, currentPredictorId);
 
            // Handle spectator/predictor
            if (data.isSpectator || data.game.allPredictionsRevealed) {
