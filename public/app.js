@@ -29,7 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const predictionsList = document.getElementById('predictionsList');
     const predictionsContainer = document.getElementById('predictionsContainer');
     const counterText = document.querySelector('.counter-text');
-    const loadingOverlay = document.getElementById('loadingOverlay'); // Loading overlay
 
     // App State
     let currentGameId = null;
@@ -74,6 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show the requested screen
         document.getElementById(screenId).style.display = 'block';
+
+        // Additional setup for specific screens
+
     }
 
     function generateRandomColor() {
@@ -93,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+
     function resetGameState() {
         predictionForm.style.display = 'block';
         waitingMessage.style.display = 'block';
@@ -105,17 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
         predictionsContainer.innerHTML = '';
     }
 
-    // Show loading indicator
-    function showLoading() {
-        loadingOverlay.style.display = 'flex';
-    }
-
-    // Hide loading indicator
-    function hideLoading() {
-        loadingOverlay.style.display = 'none';
-    }
-
-
     // Event Listeners
     createGameBtn.addEventListener('click', () => {
         showScreen('createGameScreen');
@@ -127,19 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     createNewGameBtn.addEventListener('click', async () => {
-        showLoading(); // Show loading
         const question = gameQuestionInput.value.trim();
         const secretCode = secretCodeInput.value.trim();
 
         if (!question) {
-            hideLoading(); // Hide loading
             showToast('الرجاء إدخال سؤال التحدي.');
             gameQuestionInput.focus();
             return;
         }
 
         if (secretCode !== CORRECT_SECRET_CODE) {
-            hideLoading(); // Hide loading
             showToast('رمز سري غير صالح.');
             secretCodeError.style.display = 'block';
             secretCodeInput.classList.add('shake');
@@ -179,25 +168,20 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error creating game:', error);
             showToast('فشل في إنشاء اللعبة.  الرجاء المحاولة مرة أخرى.');
-        } finally {
-            hideLoading(); // Hide loading, always
         }
     });
 
     joinGameBtn.addEventListener('click', async () => {
-        showLoading(); // Show loading
         const gameId = gameIdInput.value.trim().toUpperCase();
         const username = usernameInput.value.trim();
 
         if (!gameId) {
-            hideLoading();
             showToast('الرجاء إدخال كود اللعبة.');
             gameIdInput.focus();
             return;
         }
 
         if (!username) {
-            hideLoading();
             showToast('الرجاء إدخال اسمك.');
             usernameInput.focus();
             return;
@@ -238,8 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error joining game:', error);
             showToast(error.message || 'فشل في الانضمام إلى اللعبة.  الرجاء المحاولة مرة أخرى.');
-        } finally {
-          hideLoading();
         }
     });
 
@@ -276,18 +258,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     submitPredictionBtn.addEventListener('click', async () => {
-        showLoading();
         const prediction = predictionInput.value.trim();
 
         if (!prediction) {
-            hideLoading();
             showToast("الرجاء إدخال توقعك أو لصقه.");
             predictionInput.focus();
             return;
         }
 
         if (hasSubmitted) {
-            hideLoading();
             showToast('لقد أرسلت توقعًا بالفعل.');
             return;
         }
@@ -327,8 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error submitting prediction:', error);
             showToast(error.message || 'فشل في إرسال التوقع.  الرجاء المحاولة مرة أخرى.');
-        } finally {
-          hideLoading();
         }
     });
 
