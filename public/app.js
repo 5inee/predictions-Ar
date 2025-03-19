@@ -387,7 +387,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Scroll to predictions section
         predictionsList.scrollIntoView({ behavior: 'smooth' });
 
-        showToast('تم الكشف عن جميع التوقعات!', true);
     });
 
     socket.on('game_error', (error) => {
