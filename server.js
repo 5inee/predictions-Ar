@@ -30,7 +30,7 @@ function generateShortId() {
     return result;
 }
 
-const INACTIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
+const INACTIVE_TIMEOUT = 10 * 60 * 1000; // 2 minutes in milliseconds
 
 // دالة للتحقق من اللاعبين غير النشطين وحذفهم
 async function checkInactivePredictors() {

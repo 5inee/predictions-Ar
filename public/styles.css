@@ -224,12 +224,12 @@ textarea:focus {
 }
 
 .btn-secondary {
-  background: #f0f0f0;
+  background: #f8f8f8;
+  color: var(--primary);
 }
 
 .btn-secondary:hover {
-  background: #cacaca;
-  transform: translateY(-2px);
+  background: rgba(94, 96, 206, 0.1);
 }
 
 .btn-text {
