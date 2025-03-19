@@ -108,48 +108,46 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
 
-        const isSpectator = game.predictors.size >= game.maxPredictors;
+        // نتحقق إذا كانت اللعبة ممتلئة وإذا كانت جميع التوقعات قد أرسلت
+        const isGameFull = (game.predictors?.size || 0) >= game.maxPredictors;
+        const allPredictionsSubmitted = game.predictions.size >= game.maxPredictors;
 
-        if (!isSpectator) {
-            const predictorId = uuidv4();
-            const predictorCount = game.predictors.size;
-
-            game.predictors.set(predictorId, {
-                id: predictorId,
-                username,
-                avatarColor: getAvatarColor(predictorCount),
-                joinedAt: new Date(),
-            });
-
-            await game.save();
-
-            io.to(gameId).emit('predictor_update', {
-                count: game.predictors.size,
-                total: game.maxPredictors,
-            });
-
-            return res.json({
-                predictorId,
-                spectator: false, // هذا لاعب وليس متفرجًا
-                game: {
-                    id: game.id,
-                    question: game.question,
-                    predictorCount: game.predictors.size,
-                    maxPredictors: game.maxPredictors,
-                },
-            });
+        // لو اللعبة ممتلئة لكن التوقعات لم تكتمل بعد، نرفض الانضمام
+        if (isGameFull && !allPredictionsSubmitted) {
+            return res.status(400).json({ error: 'Game is full' });
         }
 
-        // إذا كان العدد ممتلئًا، اجعل اللاعب متفرجًا فقط
-        return res.json({
-            spectator: true,
+        const predictorId = uuidv4();
+        const predictorCount = game.predictors.size;
+
+        // إضافة علامة viewOnly للاعبين الإضافيين بعد اكتمال العدد
+        const isViewOnly = isGameFull && allPredictionsSubmitted;
+
+        game.predictors.set(predictorId, {
+            id: predictorId,
+            username,
+            avatarColor: getAvatarColor(predictorCount),
+            joinedAt: new Date(),
+            viewOnly: isViewOnly // إضافة صفة viewOnly
+        });
+
+        await game.save();
+
+        io.to(gameId).emit('predictor_update', {
+            count: game.predictors.size,
+            total: game.maxPredictors,
+        });
+
+        res.json({
+            predictorId,
             game: {
                 id: game.id,
                 question: game.question,
-                predictions: Array.from(game.predictions.values()), // إرسال كل التوقعات للعرض
                 predictorCount: game.predictors.size,
                 maxPredictors: game.maxPredictors,
-            }
+                isViewOnly: isViewOnly, // إرسال حالة المشاهدة فقط للعميل
+                allPredictionsSubmitted: allPredictionsSubmitted // إرسال حالة اكتمال التوقعات
+            },
         });
     } catch (error) {
         console.error("Error joining game:", error);
@@ -168,8 +166,14 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
         if (!game.predictors.has(predictorId)) {
-            return res.status(403).json({ error: 'You are a spectator and cannot submit predictions.' });
-        }        
+            return res.status(403).json({ error: 'Not a valid predictor' });
+        }
+
+        // التحقق من أن اللاعب ليس في وضع المشاهدة فقط
+        const predictor = game.predictors.get(predictorId);
+        if (predictor.viewOnly) {
+            return res.status(403).json({ error: 'View-only players cannot submit predictions' });
+        }
 
         if (!game.predictions || game.predictions.size >= game.maxPredictors) {
             return res.status(400).json({ error: 'Predictions are full' });
@@ -220,6 +224,34 @@ io.on('connection', (socket) => {
     socket.on('join_game', (gameId) => {
         socket.join(gameId);
         console.log(`User joined game: ${gameId}`);
+    });
+
+    // إضافة معالج لطلب التوقعات
+    socket.on('request_predictions', async (gameId) => {
+        try {
+            const game = await Game.findOne({ id: gameId });
+            if (!game || !game.revealedToAll) return;
+
+            const predictionsArray = [];
+
+            // Iterate through each prediction
+            for (const [pid, predictionData] of game.predictions.entries()) {
+                // Get the predictor information
+                const predictor = game.predictors.get(pid);
+
+                // Add to the array with the right structure
+                predictionsArray.push({
+                    predictor,
+                    prediction: predictionData
+                });
+            }
+
+            // إرسال التوقعات للمستخدم الذي طلبها فقط
+            socket.emit('all_predictions_revealed', { predictions: predictionsArray });
+        } catch (error) {
+            console.error("Error fetching predictions:", error);
+            socket.emit('game_error', { message: 'فشل في تحميل التوقعات' });
+        }
     });
 
     socket.on('disconnect', async () => {

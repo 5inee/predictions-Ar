@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPredictorId = null;
     let hasSubmitted = false;
     let currentUsername = '';
+    let isViewOnly = false;
 
     // Secret code constant
     const CORRECT_SECRET_CODE = '021';
@@ -204,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentGameId = data.game.id;
             currentPredictorId = data.predictorId;
             currentUsername = username;
+            isViewOnly = data.game.isViewOnly;
 
             showScreen('gameScreen');
             resetGameState();
@@ -217,6 +219,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Join the socket room after successful API call
             socket.emit('join_game', currentGameId);
+
+            // إذا كان المستخدم في وضع المشاهدة فقط، طلب التوقعات مباشرة
+            if (data.game.isViewOnly) {
+                // إخفاء نموذج إدخال التوقعات
+                predictionForm.style.display = 'none';
+                waitingMessage.style.display = 'none';
+                
+                // طلب جميع التوقعات من السيرفر
+                socket.emit('request_predictions', currentGameId);
+                
+                // عرض رسالة للمستخدم
+                statusMessage.style.display = 'block';
+                statusMessage.innerHTML = '<i class="fas fa-eye"></i><span> أنت في وضع المشاهدة فقط. جاري تحميل التوقعات...</span>';
+            }
 
             showToast(`مرحبًا بك في اللعبة، ${username}!`, true);
         } catch (error) {
@@ -239,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     pastePredictionBtn.addEventListener('click', async () => {
-        if (hasSubmitted) return;
+        if (hasSubmitted || isViewOnly) return;
 
         try {
             const text = await navigator.clipboard.readText();
@@ -252,12 +268,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     clearPredictionBtn.addEventListener('click', () => {
-        if (hasSubmitted) return;
+        if (hasSubmitted || isViewOnly) return;
         predictionInput.value = '';
         predictionInput.focus();
     });
 
     submitPredictionBtn.addEventListener('click', async () => {
+        if (isViewOnly) {
+            showToast('أنت في وضع المشاهدة فقط ولا يمكنك إرسال توقعات.');
+            return;
+        }
+
         const prediction = predictionInput.value.trim();
 
         if (!prediction) {
@@ -387,6 +408,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Scroll to predictions section
         predictionsList.scrollIntoView({ behavior: 'smooth' });
 
+        // إذا كان في وضع المشاهدة فقط، قم بتحديث رسالة الحالة
+        if (isViewOnly) {
+            statusMessage.style.display = 'block';
+            statusMessage.innerHTML = '<i class="fas fa-eye"></i><span> أنت في وضع المشاهدة فقط.</span>';
+        }
     });
 
     socket.on('game_error', (error) => {
