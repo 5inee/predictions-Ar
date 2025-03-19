@@ -4,20 +4,23 @@ const http = require('http');
 const socketIo = require('socket.io');
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
-const Game = require('./models/Game');
+const Game = require('./models/Game'); // استيراد الموديل
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+// Serve static files
 app.use(express.static('public'));
-app.use(express.json());
+app.use(express.json()); // عشان نقدر نقرأ بيانات JSON من الطلبات
 
+// MongoDB connection
 const mongoUri = process.env.MONGO_URI;
 mongoose.connect(mongoUri)
     .then(() => console.log('✅ Connected to MongoDB'))
     .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
+// دالة لتوليد ID قصير (ممكن تستخدمها أو uuid)
 function generateShortId() {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -27,24 +30,74 @@ function generateShortId() {
     return result;
 }
 
+const INACTIVE_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
+
+// دالة للتحقق من اللاعبين غير النشطين وحذفهم
+async function checkInactivePredictors() {
+    try {
+        // استعلام مُحسّن لجلب الألعاب التي بها لاعبين غير نشطين فقط
+        const cutoffTime = new Date(Date.now() - INACTIVE_TIMEOUT);
+        const games = await Game.find({
+            'predictors': {
+                $elemMatch: {
+                    'joinedAt': { $lt: cutoffTime }
+                }
+            }
+        });
+
+
+        for (const game of games) {
+            let predictorsChanged = false;
+
+            for (const [predictorId, predictorData] of game.predictors.entries()) {
+                //  لا حاجة لحساب timeSinceJoin هنا، الاستعلام يضمن أن joinedAt < cutoffTime
+
+                // التحقق مما إذا كان اللاعب غير نشط (مر وقت طويل على انضمامه ولم يرسل توقعًا)
+                if (!game.predictions.has(predictorId)) {
+                    game.predictors.delete(predictorId);
+                    console.log(`Predictor ${predictorId} removed from game ${game.id} due to inactivity.`);
+                    predictorsChanged = true;
+                }
+            }
+
+            if (predictorsChanged) {
+                await game.save();
+                // إرسال تحديث لجميع اللاعبين في الغرفة
+                io.to(game.id).emit('predictor_update', {
+                    count: game.predictors.size,
+                    total: game.maxPredictors,
+                });
+            }
+        }
+    } catch (error) {
+        console.error("Error checking inactive predictors:", error);
+    }
+}
+
+// تشغيل دالة التحقق بشكل دوري (كل دقيقة)
+setInterval(checkInactivePredictors, 60 * 1000);  // Check every minute
+
+
+// 1.  إنشاء لعبة جديدة (Create a new game)
 app.post('/api/games', async (req, res) => {
     try {
-        const gameId = generateShortId();
+        const gameId = generateShortId(); // أو استخدم uuidv4()
         const newGame = new Game({
             id: gameId,
             question: req.body.question,
-            maxPredictors: 5,
-            predictors: new Map(),
-            predictions: new Map(),
+            maxPredictors: 5, // ممكن تخليه متغير
+            predictors: new Map(), // تهيئة predictors
+            predictions: new Map(), // تهيئة predictions هنا
         });
         await newGame.save();
-        res.json({ gameId });
+        res.json({ gameId }); // نرجع ID اللعبة
     } catch (error) {
         console.error("Error creating game:", error);
         res.status(500).json({ error: 'Failed to create game' });
     }
 });
 
+// 2. الانضمام إلى لعبة (Join a game)
 app.post('/api/games/:gameId/join', async (req, res) => {
     const { gameId } = req.params;
     const { username } = req.body;
@@ -55,56 +108,43 @@ app.post('/api/games/:gameId/join', async (req, res) => {
             return res.status(404).json({ error: 'Game not found' });
         }
 
+        if ((game.predictors?.size || 0) >= game.maxPredictors) {
+            return res.status(400).json({ error: 'Game is full' });
+        }
+
         const predictorId = uuidv4();
-        let isSpectator = false;
+        const predictorCount = game.predictors.size;
 
-        if (game.predictors.size < game.maxPredictors) {
-            game.predictors.set(predictorId, {
-                id: predictorId,
-                username,
-                avatarColor: getAvatarColor(game.predictors.size),
-                joinedAt: new Date(),
-            });
-            await game.save();
+        game.predictors.set(predictorId, {
+            id: predictorId,
+            username,
+            avatarColor: getAvatarColor(predictorCount),
+            joinedAt: new Date(), // إضافة وقت الانضمام هنا
+        });
 
-            io.to(gameId).emit('predictor_update', {
-                count: game.predictors.size,
-                total: game.maxPredictors,
-            });
-        } else {
-            isSpectator = true;
-        }
+        await game.save();
 
-        let predictionsData = [];
-        if (game.revealedToAll) {
-            for (const [pid, predictionData] of game.predictions.entries()) {
-                const predictor = game.predictors.get(pid);
-                predictionsData.push({
-                    predictor,
-                    prediction: predictionData
-                });
-            }
-        }
+        io.to(gameId).emit('predictor_update', {
+            count: game.predictors.size,
+            total: game.maxPredictors,
+        });
 
         res.json({
             predictorId,
-            isSpectator,
             game: {
                 id: game.id,
                 question: game.question,
                 predictorCount: game.predictors.size,
                 maxPredictors: game.maxPredictors,
-                allPredictionsRevealed: game.revealedToAll,
-                predictions: predictionsData,
             },
         });
-
     } catch (error) {
         console.error("Error joining game:", error);
         res.status(500).json({ error: 'Failed to join game' });
     }
 });
 
+// 3. إرسال توقع (Submit a prediction)
 app.post('/api/games/:gameId/predict', async (req, res) => {
     const { gameId } = req.params;
     const { predictorId, prediction } = req.body;
@@ -128,16 +168,22 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
         const predictionsCount = game.predictions.size;
         const allPredictionsSubmitted = predictionsCount === game.maxPredictors;
 
+        // إرسال تحديث لجميع اللاعبين في الغرفة بعدد التوقعات
         io.to(gameId).emit('prediction_update', { count: predictionsCount, total: game.maxPredictors });
 
+        // إذا اكتمل عدد التوقعات، أرسل كل التوقعات
         if (allPredictionsSubmitted && !game.revealedToAll) {
             game.revealedToAll = true;
             await game.save();
 
             const predictionsArray = [];
 
+            // Iterate through each prediction
             for (const [pid, predictionData] of game.predictions.entries()) {
+                // Get the predictor information
                 const predictor = game.predictors.get(pid);
+
+                // Add to the array with the right structure
                 predictionsArray.push({
                     predictor,
                     prediction: predictionData
@@ -156,48 +202,44 @@ app.post('/api/games/:gameId/predict', async (req, res) => {
 
 // Socket.IO
 io.on('connection', (socket) => {
-    console.log('a user connected with socket ID:', socket.id);
-    let joinedGameId = null;
-    //  لم يعد هناك حاجة لـ currentPredictorId هنا
+    console.log('a user connected');
 
-    socket.on('join_game', async (gameId, predictorId) => { // استقبال predictorId
+    socket.on('join_game', (gameId) => {
         socket.join(gameId);
-        joinedGameId = gameId;
-        console.log(`User joined game: ${gameId}, predictorId: ${predictorId}`);
-
-        //  لا حاجة للبحث عن predictorId هنا -  لقد استقبلناه
+        console.log(`User joined game: ${gameId}`);
     });
 
     socket.on('disconnect', async () => {
-        console.log(`user disconnected with socket ID: ${socket.id}`);
+        console.log('user disconnected');
 
-        if (joinedGameId) { // فقط تحقق من gameId
-            try {
-                const game = await Game.findOne({ id: joinedGameId });
-                if (game) {
-                    //  ابحث عن اللاعب بناءً على socket.id
-                    let predictorIdToDelete = null;
-                    for (const [key, value] of game.predictors.entries()) {
-                        //  مقارنة بمعرف الاتصال
-                        if (value.id === socket.handshake.query.predictorId) {
-                            predictorIdToDelete = key;
-                            break;
-                        }
-                    }
-
-
-                    if (predictorIdToDelete && !game.predictions.has(predictorIdToDelete)) {
-                        game.predictors.delete(predictorIdToDelete);
-                        await game.save();
-                        io.to(joinedGameId).emit('predictor_update', {
-                            count: game.predictors.size,
-                            total: game.maxPredictors,
-                        });
-                    }
+        //  إزالة اللاعب من اللعبة إذا لم يكن قد أرسل توقع
+        try {
+            const games = await Game.find({});
+            for (const game of games) {
+              let predictorRemoved = false;
+              for (const [predictorId, predictorData] of game.predictors.entries())
+              {
+                //لا يمكن مطابقة id, لذلك قمت بتعليق هذا الجزء
+                // if (predictorData.id === socket.id) {
+                    // Remove if no prediction submitted
+                  if (!game.predictions.has(predictorId)) {
+                    game.predictors.delete(predictorId);
+                    console.log(`Predictor ${predictorId} removed from game ${game.id} on disconnect.`);
+                    predictorRemoved = true;
                 }
-            } catch (error) {
-                console.error("Error handling disconnect:", error);
+                // }
             }
+              if(predictorRemoved){
+                await game.save();
+                io.to(game.id).emit('predictor_update', {
+                        count: game.predictors.size,
+                        total: game.maxPredictors
+                    });
+              }
+            }
+
+        } catch (error) {
+            console.error("Error handling disconnect:", error);
         }
     });
 });
@@ -207,6 +249,7 @@ server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
+// دالة بسيطة لاختيار لون للصورة الرمزية
 function getAvatarColor(index) {
     const colors = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8'];
     return colors[index % colors.length];

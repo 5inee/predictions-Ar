@@ -1,9 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const socket = io({
-        query: {
-            // سيتم ملء هذا لاحقا
-        }
-      });
+    const socket = io();
 
     // DOM Elements
     const joinScreen = document.getElementById('joinScreen');
@@ -206,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             currentGameId = data.game.id;
-            currentPredictorId = data.predictorId; // تخزين ال predictorId
+            currentPredictorId = data.predictorId;
             currentUsername = username;
 
             showScreen('gameScreen');
@@ -219,51 +215,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Set initial player count
             playerCountDisplay.textContent = `اللاعبون: ${data.game.predictorCount}/${data.game.maxPredictors}`;
 
-            // Join the socket room --  التعديل هنا!
-            socket.io.opts.query = { predictorId: currentPredictorId }; // اضف ال predictorId
-            socket.emit('join_game', currentGameId, currentPredictorId);
-
-           // Handle spectator/predictor
-           if (data.isSpectator || data.game.allPredictionsRevealed) {
-                // Hide prediction form, show predictions directly
-
-                waitingMessage.style.display = 'none';
-                predictionForm.style.display = 'none';
-                statusMessage.style.display = 'none';
-                predictionCount.style.display = 'none';
-                predictionsContainer.innerHTML = '';
-
-                 data.game.predictions.forEach((item) => {
-                    const { predictor, prediction } = item;
-                    const isCurrentUser = predictor.id === currentPredictorId;
-                    const avatarColor = predictor.avatarColor || generateRandomColor();
-
-                    const predictionCard = document.createElement('div');
-                    predictionCard.className = `prediction-card ${isCurrentUser ? 'fade-in' : ''}`;
-
-                    const formattedPrediction = prediction.content.replace(/\n/g, '<br>');
-
-                        predictionCard.innerHTML = `
-                        <div class="prediction-header">
-                            <div class="predictor-info">
-                                <div class="predictor-avatar" style="background-color: ${avatarColor}">
-                                    ${predictor.username.charAt(0).toUpperCase()}
-                                </div>
-                                <div class="predictor-name">
-                                    ${predictor.username} ${isCurrentUser ? '(أنت)' : ''}
-                                </div>
-                            </div>
-                            <div class="timestamp">${formatTime(prediction.submittedAt)}</div>
-                        </div>
-                        <div class="prediction-content">${formattedPrediction}</div>
-                    `;
-
-                    predictionsContainer.appendChild(predictionCard);
-                });
-                predictionsList.style.display = 'block';
-                predictionsList.scrollIntoView({ behavior: 'smooth' });
-           }
-
+            // Join the socket room after successful API call
+            socket.emit('join_game', currentGameId);
 
             showToast(`مرحبًا بك في اللعبة، ${username}!`, true);
         } catch (error) {
@@ -434,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Scroll to predictions section
         predictionsList.scrollIntoView({ behavior: 'smooth' });
 
+        showToast('تم الكشف عن جميع التوقعات!', true);
     });
 
     socket.on('game_error', (error) => {
