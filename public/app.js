@@ -89,14 +89,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function formatTime(dateString) {
         const date = new Date(dateString);
-        return date.toLocaleTimeString('ar-EG', { // Use Arabic locale for time formatting
+        return `\u200E${date.toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true
-        });
+        }).replace(',', ' |')}`;
     }
-
-
+    
     function resetGameState() {
         predictionForm.style.display = 'block';
         waitingMessage.style.display = 'block';
