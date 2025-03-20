@@ -132,7 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (secretCode !== CORRECT_SECRET_CODE) {
             showToast('رمز سري غير صالح.');
             secretCodeError.style.display = 'block';
-            secretCodeInput.classList.add('shake');
 
             setTimeout(() => {
                 secretCodeInput.classList.remove('shake');
